@@ -13,6 +13,19 @@ type Context = {
   failures: number;
 };
 
+async function withMockRandom<TValue>(
+  value: number,
+  run: () => Promise<TValue>,
+): Promise<TValue> {
+  const original = Math.random;
+  Math.random = () => value;
+  try {
+    return await run();
+  } finally {
+    Math.random = original;
+  }
+}
+
 describe("runner", () => {
   test("createRunner requires a configured driver", () => {
     const flowli = defineJobs({
@@ -297,5 +310,138 @@ describe("runner", () => {
       });
       expect(await driver.acquireNextReady(Date.now(), 5_000)).toBeNull();
     });
+  });
+
+  test("exponential backoff honors maxDelayMs and persists retry metadata", async () => {
+    const clients = createMemoryRedisClients();
+    const context: Context = {
+      calls: [],
+      failures: 0,
+    };
+    const task = job.withContext<Context>()("task", {
+      input: v.object({
+        value: v.string(),
+      }),
+      defaults: {
+        maxAttempts: 4,
+        backoff: {
+          type: "exponential",
+          delayMs: 1_000,
+          maxDelayMs: 1_500,
+        },
+      },
+      handler: async ({ ctx }) => {
+        ctx.failures += 1;
+        throw new Error("retry me");
+      },
+    });
+
+    const flowli = defineJobs.withContext<Context>()({
+      jobs: { task },
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "backoff-cap",
+      }),
+      context,
+    });
+    const driver = getFlowliRuntimeInternals(flowli).driver!;
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 0), async () => {
+      await flowli.task.enqueue({ value: "retry" });
+      const acquired = await driver.acquireNextReady(Date.now(), 5_000);
+
+      expect(acquired).not.toBeNull();
+      const result = await driver.markFailed(acquired!, Date.now(), {
+        code: "FLOWLI_HANDLER_ERROR",
+        message: "retry me",
+      });
+
+      expect(result).toEqual({
+        state: "retrying",
+        retryAt: Date.now() + 1_000,
+      });
+    });
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 1), async () => {
+      const reacquired = await driver.acquireNextReady(Date.now(), 5_000);
+      expect(reacquired?.record.nextRetryAt).toBe(Date.now());
+      expect(reacquired?.record.lastFailedAt).toBe(
+        Date.UTC(2026, 0, 1, 0, 0, 0),
+      );
+      expect(reacquired?.record.failureCount).toBe(1);
+
+      const result = await driver.markFailed(reacquired!, Date.now(), {
+        code: "FLOWLI_HANDLER_ERROR",
+        message: "retry me again",
+      });
+
+      expect(result).toEqual({
+        state: "retrying",
+        retryAt: Date.now() + 1_500,
+      });
+    });
+  });
+
+  test("retry scheduling supports jitter and emits retry hooks", async () => {
+    const clients = createMemoryRedisClients();
+    const retries: Array<{
+      jobId: string;
+      jobName: string;
+      retryAt: number;
+      code: string;
+    }> = [];
+    const task = job("task", {
+      input: v.object({
+        value: v.string(),
+      }),
+      defaults: {
+        maxAttempts: 2,
+        backoff: {
+          type: "fixed",
+          delayMs: 1_000,
+          jitter: {
+            minRatio: 0.2,
+            maxRatio: 0.4,
+          },
+        },
+      },
+      handler: async () => {
+        throw new Error("boom");
+      },
+    });
+
+    const flowli = defineJobs({
+      jobs: () => ({ task }),
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "retry-hook",
+      }),
+      context: {},
+    });
+    const runner = createRunner({
+      flowli,
+      hooks: {
+        onJobRetryScheduled(jobId, jobName, retryAt, error) {
+          retries.push({
+            jobId,
+            jobName,
+            retryAt,
+            code: error.code,
+          });
+        },
+      },
+    });
+
+    await withMockRandom(0.5, async () => {
+      await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 0), async () => {
+        await flowli.task.enqueue({ value: "retry" });
+        expect(await runner.runOnce()).toBe(1);
+      });
+    });
+
+    expect(retries).toHaveLength(1);
+    expect(retries[0]?.jobName).toBe("task");
+    expect(retries[0]?.code).toBe("FLOWLI_HANDLER_ERROR");
+    expect(retries[0]?.retryAt).toBe(Date.UTC(2026, 0, 1, 0, 0, 0) + 300);
   });
 });

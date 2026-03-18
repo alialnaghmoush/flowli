@@ -427,6 +427,12 @@ Flowli supports:
 
 The job definitions stay the same. Only the driver changes.
 
+Retry defaults can be attached globally or per job, including:
+
+- `fixed` and `exponential` backoff
+- capped retries with `maxDelayMs`
+- jitter to spread retry bursts
+
 ## Runner
 
 The runner is explicit and secondary by design.

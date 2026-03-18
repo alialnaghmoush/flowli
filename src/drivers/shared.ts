@@ -161,8 +161,10 @@ export function createRedisDriver(
       return updated === "OK";
     },
     async markCompleted(acquired, finishedAt) {
+      const { nextRetryAt: _nextRetryAt, ...recordWithoutRetryAt } =
+        acquired.record;
       const completedRecord: PersistedJobRecord = {
-        ...acquired.record,
+        ...recordWithoutRetryAt,
         state: "completed",
         updatedAt: finishedAt,
       };
@@ -174,15 +176,22 @@ export function createRedisDriver(
     async markFailed(acquired, finishedAt, error) {
       const shouldRetry =
         acquired.record.attemptsMade < acquired.record.maxAttempts;
-      const retryAt = shouldRetry
-        ? finishedAt + computeBackoff(acquired.record, finishedAt)
-        : finishedAt;
+      const retryDelay = shouldRetry
+        ? computeBackoff(acquired.record)
+        : undefined;
+      const retryAt =
+        shouldRetry && retryDelay !== undefined
+          ? finishedAt + retryDelay
+          : finishedAt;
       const nextRecord: PersistedJobRecord = {
         ...acquired.record,
         state: shouldRetry ? "queued" : "failed",
         scheduledFor: retryAt,
         updatedAt: finishedAt,
         lastError: error,
+        lastFailedAt: finishedAt,
+        failureCount: acquired.record.failureCount + 1,
+        ...(shouldRetry ? { nextRetryAt: retryAt } : {}),
       };
 
       await writeJob(nextRecord);
@@ -196,7 +205,14 @@ export function createRedisDriver(
 
       await commands.del(keys.lease(nextRecord.id));
 
-      return shouldRetry ? "retrying" : "failed";
+      return shouldRetry
+        ? {
+            state: "retrying",
+            retryAt,
+          }
+        : {
+            state: "failed",
+          };
     },
     async materializeDueSchedules(now, leaseMs) {
       const dueKeys = await commands.zrangebyscore(
@@ -281,19 +297,34 @@ export function createRedisDriver(
   }
 }
 
-function computeBackoff(
-  record: PersistedJobRecord,
-  finishedAt: number,
-): number {
-  void finishedAt;
+function computeBackoff(record: PersistedJobRecord): number | undefined {
   if (!record.backoff) {
     return 0;
   }
 
-  if (record.backoff.type === "fixed") {
-    return record.backoff.delayMs;
+  let delay =
+    record.backoff.type === "fixed"
+      ? record.backoff.delayMs
+      : record.backoff.delayMs *
+        Math.max(1, 2 ** Math.max(record.attemptsMade - 1, 0));
+
+  if (record.backoff.maxDelayMs !== undefined) {
+    delay = Math.min(delay, record.backoff.maxDelayMs);
   }
 
-  const exponent = Math.max(record.attemptsMade - 1, 0);
-  return record.backoff.delayMs * Math.max(1, 2 ** exponent);
+  if (record.backoff.jitter) {
+    const jitter =
+      record.backoff.jitter === true
+        ? { minRatio: 0.5, maxRatio: 1 }
+        : record.backoff.jitter;
+    const minRatio = Math.max(jitter.minRatio, 0);
+    const maxRatio = Math.max(jitter.maxRatio, minRatio);
+    delay *= minRatio + Math.random() * (maxRatio - minRatio);
+  }
+
+  if (record.backoff.maxDelayMs !== undefined) {
+    delay = Math.min(delay, record.backoff.maxDelayMs);
+  }
+
+  return Math.max(Math.round(delay), 0);
 }

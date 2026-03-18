@@ -54,9 +54,16 @@ export interface JobDefaults {
   readonly backoff?: BackoffOptions;
 }
 
+export interface BackoffJitterOptions {
+  readonly minRatio: number;
+  readonly maxRatio: number;
+}
+
 export interface BackoffOptions {
   readonly type: "fixed" | "exponential";
   readonly delayMs: number;
+  readonly maxDelayMs?: number;
+  readonly jitter?: boolean | BackoffJitterOptions;
 }
 
 export interface FlowliInvocationOptions<TMeta> {
@@ -186,7 +193,7 @@ export interface FlowliDriver {
     acquired: AcquiredJobRecord,
     finishedAt: number,
     error: PersistedJobError,
-  ): Promise<"failed" | "retrying">;
+  ): Promise<MarkFailedResult>;
   materializeDueSchedules(now: number, leaseMs: number): Promise<number>;
 }
 
@@ -294,9 +301,17 @@ export interface PersistedJobRecord {
   readonly updatedAt: number;
   readonly scheduledFor: number;
   readonly attemptsMade: number;
+  readonly failureCount: number;
   readonly maxAttempts: number;
   readonly backoff?: BackoffOptions;
   readonly lastError?: PersistedJobError;
+  readonly lastFailedAt?: number;
+  readonly nextRetryAt?: number;
+}
+
+export interface MarkFailedResult {
+  readonly state: "failed" | "retrying";
+  readonly retryAt?: number;
 }
 
 export interface AcquiredJobRecord {

@@ -19,6 +19,12 @@ export interface RunnerHooks {
     jobName: string,
     error: PersistedJobError,
   ) => void | Promise<void>;
+  readonly onJobRetryScheduled?: (
+    jobId: string,
+    jobName: string,
+    retryAt: number,
+    error: PersistedJobError,
+  ) => void | Promise<void>;
 }
 
 export interface RunnerOptions<

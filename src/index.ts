@@ -9,6 +9,7 @@ export {
 } from "./core/errors.js";
 export { createContextualJobFactory, job } from "./core/job.js";
 export type {
+  BackoffJitterOptions,
   BackoffOptions,
   DefineJobsBuilder,
   DelayValue,

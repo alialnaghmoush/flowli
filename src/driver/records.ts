@@ -26,6 +26,7 @@ export function createPersistedJobRecord(options: {
     updatedAt: options.now,
     scheduledFor: options.scheduledFor,
     attemptsMade: 0,
+    failureCount: 0,
     maxAttempts: options.maxAttempts,
     ...(options.meta !== undefined ? { meta: options.meta } : {}),
     ...(options.backoff ? { backoff: options.backoff } : {}),

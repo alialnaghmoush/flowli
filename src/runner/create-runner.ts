@@ -132,7 +132,15 @@ export function createRunner<
     } catch (error) {
       clearInterval(heartbeat);
       const serialized = createPersistedJobError(error);
-      await driver.markFailed(acquired, Date.now(), serialized);
+      const result = await driver.markFailed(acquired, Date.now(), serialized);
+      if (result.state === "retrying" && result.retryAt !== undefined) {
+        await options.hooks?.onJobRetryScheduled?.(
+          acquired.record.id,
+          acquired.record.name,
+          result.retryAt,
+          serialized,
+        );
+      }
       await options.hooks?.onJobFailed?.(
         acquired.record.id,
         acquired.record.name,
