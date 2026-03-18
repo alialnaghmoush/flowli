@@ -8,6 +8,7 @@
     "./redis": "./src/redis.ts",
     "./bun-redis": "./src/bun-redis.ts",
     "./next": "./src/next.ts",
+    "./tanstack-start": "./src/tanstack-start.ts",
     "./hono": "./src/hono.ts",
     "./runner": "./src/runner.ts"
   },

@@ -6,6 +6,27 @@ Flowli is a jobs runtime with a code-first API, first-class execution strategies
 
 Define jobs once. Run them anywhere.
 
+## Navigate
+
+- [Why Flowli](#why-flowli)
+- [What It Feels Like](#what-it-feels-like)
+- [The Core Idea](#the-core-idea)
+- [Primary Authoring Path](#primary-authoring-path)
+- [`run()` Works Without Infrastructure](#run-works-without-infrastructure)
+- [Rich Example](#rich-example)
+- [Context vs Meta](#context-vs-meta)
+- [Async Execution](#async-execution)
+- [Runner](#runner)
+- [Async Semantics](#async-semantics)
+- [Reusable Predeclared Jobs](#reusable-predeclared-jobs)
+- [Hono](#hono)
+- [Next.js](#nextjs)
+- [TanStack Start](#tanstack-start)
+- [Install](#install)
+- [What Flowli Optimizes For](#what-flowli-optimizes-for)
+- [Exports](#exports)
+- [Status](#status)
+
 ## Why Flowli
 
 Most job systems make one of these tradeoffs:
@@ -24,68 +45,93 @@ Flowli is built around a different model:
 
 It is not a BullMQ clone. It is a typed runtime for background and deferred execution.
 
+```mermaid
+flowchart LR
+  App["App Code<br/>Routes, Services, Scripts, Tests"] --> Runtime["defineJobs()<br/>Flowli Runtime"]
+  Jobs["Job Definitions<br/>input, meta, handler"] --> Runtime
+  Context["Runtime Context<br/>db, logger, mailer, config"] --> Runtime
+
+  Runtime --> Run["run()<br/>in-process"]
+  Runtime --> Persist["enqueue() / delay() / schedule()"]
+
+  Persist --> Driver["Redis Driver<br/>ioredis, redis, Bun Redis"]
+  Driver --> Redis["Redis-compatible backend"]
+  Runner["createRunner()"] --> Driver
+  Runner --> Jobs
+
+  Frameworks["Hono / Next.js / TanStack Start"] --> Runtime
+```
+
 ## What It Feels Like
 
 ```ts
 // src/flowli/jobs/create-audit-log.ts
 import * as v from "valibot";
 import { job } from "flowli";
+import type { AppContext } from "..";
 
-export const createAuditLog = job.withContext<{
-  db: typeof db;
-  schema: typeof schema;
-  logger: typeof logger;
-}>()("create_audit_log", {
-  input: v.object({
-    entityType: v.string(),
-    entityId: v.string(),
-    action: v.string(),
-    message: v.string(),
-  }),
-  meta: v.object({
-    requestId: v.string(),
-    actorId: v.optional(v.string()),
-  }),
-  handler: async ({ input, ctx, meta }) => {
-    await ctx.db.insert(ctx.schema.auditLogs).values({
-      entityType: input.entityType,
-      entityId: input.entityId,
-      action: input.action,
-      message: input.message,
-      requestId: meta?.requestId,
-      actorId: meta?.actorId ?? null,
-    });
-
-    ctx.logger.info({
-      job: "create_audit_log",
-      requestId: meta?.requestId,
-      entityId: input.entityId,
-    });
-  },
+export const auditLogSchema = v.object({
+  entityType: v.string(),
+  entityId: v.string(),
+  action: v.string(),
+  message: v.string(),
 });
+
+export const auditLogMeta = v.object({
+  requestId: v.string(),
+  actorId: v.optional(v.string()),
+});
+
+export const createAuditLog = job.withContext<AppContext>()(
+  "create_audit_log",
+  {
+    input: auditLogSchema,
+    meta: auditLogMeta,
+    handler: async ({ input, ctx, meta }) => {
+      await ctx.db.insert(ctx.schema.auditLogs).values({
+        entityType: input.entityType,
+        entityId: input.entityId,
+        action: input.action,
+        message: input.message,
+        requestId: meta?.requestId,
+        actorId: meta?.actorId ?? null,
+      });
+
+      ctx.logger.info({
+        job: "create_audit_log",
+        requestId: meta?.requestId,
+        entityId: input.entityId,
+      });
+    },
+  },
+);
 ```
 
 ```ts
 // src/flowli/jobs/send-notification-email.ts
 import * as v from "valibot";
 import { job } from "flowli";
+import type { AppContext } from "..";
 
-export const sendNotificationEmail = job.withContext<{
-  mailer: typeof mailer;
-}>()("send_notification_email", {
-  input: v.object({
-    email: v.string(),
-    subject: v.string(),
-    message: v.string(),
-  }),
-  handler: async ({ input, ctx }) => {
-    await ctx.mailer.send({
-      to: input.email,
-      subject: input.subject,
-      text: input.message,
-    });
-  },
+export const notificationEmailSchema = v.object({
+  email: v.string(),
+  subject: v.string(),
+  message: v.string(),
 });
+
+export const sendNotificationEmail = job.withContext<AppContext>()(
+  "send_notification_email",
+  {
+    input: notificationEmailSchema,
+    handler: async ({ input, ctx }) => {
+      await ctx.mailer.send({
+        to: input.email,
+        subject: input.subject,
+        text: input.message,
+      });
+    },
+  },
+);
 ```
 
 ```ts
@@ -99,6 +145,13 @@ export * from "./send-notification-email";
 import { defineJobs } from "flowli";
 import { ioredisDriver } from "flowli/ioredis";
 import * as jobs from "./jobs";
+
+export type AppContext = {
+  db: typeof db;
+  schema: typeof schema;
+  logger: typeof logger;
+  mailer: typeof mailer;
+};
 
 export const flowli = defineJobs({
   driver: ioredisDriver({
@@ -168,6 +221,16 @@ Flowli is built around four primitives:
 4. optional async runtime
    Attach `createRunner({ flowli })` only when you want persisted async processing.
 
+```mermaid
+flowchart TD
+  Define["job()"] --> Bind["defineJobs()"]
+  Bind --> Choose{"Choose a strategy"}
+  Choose --> Run["run()<br/>validate -> resolve context -> invoke handler"]
+  Choose --> Enqueue["enqueue()<br/>persist now"]
+  Choose --> Delay["delay()<br/>persist with scheduledFor"]
+  Choose --> Schedule["schedule()<br/>persist recurring definition"]
+```
+
 ## Primary Authoring Path
 
 The canonical Flowli path is runtime-first:
@@ -176,31 +239,36 @@ The canonical Flowli path is runtime-first:
 // src/flowli/jobs/create-audit-log.ts
 import * as v from "valibot";
 import { job } from "flowli";
+import type { AppContext } from "..";
 
-export const createAuditLog = job.withContext<{
-  logger: typeof logger;
-  db: typeof db;
-}>()("create_audit_log", {
-  input: v.object({
-    entityId: v.string(),
-    action: v.string(),
-  }),
-  meta: v.object({
-    requestId: v.string(),
-  }),
-  handler: async ({ input, ctx, meta }) => {
-    await ctx.db.insert("audit_logs").values({
-      entityId: input.entityId,
-      action: input.action,
-      requestId: meta?.requestId,
-    });
-
-    ctx.logger.info({
-      entityId: input.entityId,
-      action: input.action,
-    });
-  },
+export const auditLogSchema = v.object({
+  entityId: v.string(),
+  action: v.string(),
 });
+
+export const auditLogMeta = v.object({
+  requestId: v.string(),
+});
+
+export const createAuditLog = job.withContext<AppContext>()(
+  "create_audit_log",
+  {
+    input: auditLogSchema,
+    meta: auditLogMeta,
+    handler: async ({ input, ctx, meta }) => {
+      await ctx.db.insert("audit_logs").values({
+        entityId: input.entityId,
+        action: input.action,
+        requestId: meta?.requestId,
+      });
+
+      ctx.logger.info({
+        entityId: input.entityId,
+        action: input.action,
+      });
+    },
+  },
+);
 ```
 
 ```ts
@@ -212,6 +280,11 @@ export * from "./create-audit-log";
 // src/flowli/index.ts
 import { defineJobs } from "flowli";
 import * as jobs from "./jobs";
+
+export type AppContext = {
+  logger: typeof logger;
+  db: typeof db;
+};
 
 export const flowli = defineJobs({
   context: {
@@ -336,14 +409,15 @@ To persist jobs, add a driver:
 // src/flowli/jobs/send-email.ts
 import * as v from "valibot";
 import { job } from "flowli";
+import type { AppContext } from "..";
 
-export const sendEmail = job.withContext<{
-  mailer: typeof mailer;
-}>()("send_email", {
-  input: v.object({
-    email: v.string(),
-    subject: v.string(),
-  }),
+export const emailInputSchema = v.object({
+  email: v.string(),
+  subject: v.string(),
+});
+
+export const sendEmail = job.withContext<AppContext>()("send_email", {
+  input: emailInputSchema,
   handler: async ({ input, ctx }) => {
     await ctx.mailer.send({
       to: input.email,
@@ -363,6 +437,12 @@ export * from "./send-email";
 import { defineJobs } from "flowli";
 import { ioredisDriver } from "flowli/ioredis";
 import * as jobs from "./jobs";
+
+export type AppContext = {
+  db: typeof db;
+  logger: typeof logger;
+  mailer: typeof mailer;
+};
 
 export const flowli = defineJobs({
   driver: ioredisDriver({
@@ -424,6 +504,27 @@ Persisted execution in Flowli is:
 
 Handlers that run asynchronously should be safe to run more than once.
 
+```mermaid
+sequenceDiagram
+  participant App as App Code
+  participant Flowli as Flowli Runtime
+  participant Driver as Redis Driver
+  participant Runner as Runner
+  participant Handler as Job Handler
+
+  App->>Flowli: enqueue() / delay() / schedule()
+  Flowli->>Driver: persist job or schedule
+  Runner->>Driver: reserve due work with lease
+  Driver-->>Runner: acquired job
+  Runner->>Flowli: resolve context + validate payload
+  Flowli->>Handler: invoke handler
+  alt success
+    Runner->>Driver: mark completed
+  else failure
+    Runner->>Driver: mark failed or retry
+  end
+```
+
 ## Reusable Predeclared Jobs
 
 If you want shareable job modules outside the runtime declaration, Flowli supports that too.
@@ -440,12 +541,14 @@ type AppContext = {
   };
 };
 
+const auditLogSchema = v.object({
+  entityId: v.string(),
+});
+
 export const createAuditLog = job.withContext<AppContext>()(
   "create_audit_log",
   {
-    input: v.object({
-      entityId: v.string(),
-    }),
+    input: auditLogSchema,
     handler: async ({ input, ctx }) => {
       ctx.logger.info(input.entityId);
     },
@@ -526,6 +629,66 @@ export const sendNotificationAction = nextAction(
 - no direct dependency on Next internals inside your jobs
 - works with an already configured `flowli` instance
 
+## TanStack Start
+
+Use the same configured runtime in TanStack Start server routes and server functions:
+
+```ts
+// src/routes/api/audit.$entityId.ts
+import { createFileRoute } from "@tanstack/react-router";
+import { tanstackStartRoute } from "flowli/tanstack-start";
+import { flowli } from "@/src/flowli";
+
+export const Route = createFileRoute("/api/audit/$entityId")({
+  server: {
+    handlers: {
+      POST: tanstackStartRoute(
+        flowli,
+        async ({ request, params, flowli }) => {
+          const body = await request.json();
+
+          await flowli.createAuditLog.run({
+            entityType: body.entityType ?? "record",
+            entityId: params.entityId,
+            action: body.action ?? "record.updated",
+            message: "Audit event received from TanStack Start",
+          });
+
+          return Response.json({ ok: true });
+        },
+      ),
+    },
+  },
+});
+```
+
+```ts
+// src/lib/notifications.functions.ts
+import { createServerFn } from "@tanstack/react-start";
+import { tanstackStartServerFn } from "flowli/tanstack-start";
+import { flowli } from "@/src/flowli";
+
+export const sendNotification = createServerFn({ method: "POST" }).handler(
+  tanstackStartServerFn(
+    flowli,
+    async ({ flowli, data }: { data: { email: string; subject: string } }) => {
+      await flowli.sendNotificationEmail.enqueue({
+        email: data.email,
+        subject: data.subject,
+        message: "Triggered from a TanStack Start server function.",
+      });
+    },
+  ),
+);
+```
+
+`flowli/tanstack-start` stays lightweight:
+
+- no second runtime
+- no hidden registry
+- no framework state inside your job definitions
+- works with existing TanStack Start server route and server function patterns
+
 ## Install
 
 ```bash
@@ -552,6 +715,10 @@ Optional framework peers:
 bun add next
 ```
 
+```bash
+bun add @tanstack/react-start
+```
+
 ## What Flowli Optimizes For
 
 - small API surface
@@ -569,6 +736,7 @@ bun add next
 - `flowli/redis`
 - `flowli/bun-redis`
 - `flowli/next`
+- `flowli/tanstack-start`
 - `flowli/hono`
 - `flowli/runner`
 
@@ -581,6 +749,7 @@ Flowli v1 currently includes:
 - `run`, `enqueue`, `delay`, and `schedule`
 - pluggable Redis drivers
 - Next.js helpers
+- TanStack Start helpers
 - explicit runner support
 - Hono middleware
 - npm and JSR publish configuration

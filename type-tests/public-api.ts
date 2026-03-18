@@ -3,6 +3,11 @@ import { z } from "zod";
 import type { HonoFlowliVariables } from "../src/hono.js";
 import { defineJobs, job } from "../src/index.js";
 import { nextAction, nextRoute } from "../src/next.js";
+import {
+  type TanStackStartServerFnTools,
+  tanstackStartRoute,
+  tanstackStartServerFn,
+} from "../src/tanstack-start.js";
 
 type Equal<Left, Right> =
   (<TValue>() => TValue extends Left ? 1 : 2) extends <
@@ -66,6 +71,7 @@ const flowli = defineJobs({
 });
 const runtimeCheck = flowli;
 void runtimeCheck;
+type AppFlowli = typeof runtimeCheck;
 
 void flowli.valibotJob.run(
   { id: "todo_1" },
@@ -123,6 +129,47 @@ const createTodoAction = nextAction(
 );
 
 void createTodoAction(new FormData());
+
+const startGet = tanstackStartRoute(
+  flowli,
+  async ({ flowli, params, request, context }) => {
+    request.method satisfies string;
+    context satisfies Record<PropertyKey, unknown>;
+    return Response.json({
+      value: await flowli.valibotJob.run(
+        { id: typeof params.id === "string" ? params.id : "fallback" },
+        {
+          meta: {
+            requestId: "req_3",
+          },
+        },
+      ),
+    });
+  },
+);
+
+void startGet({
+  request: new Request("https://flowli.dev"),
+  params: {
+    id: "todo_3",
+  },
+  context: {},
+});
+
+const saveWithServerFn = tanstackStartServerFn(
+  flowli,
+  async ({
+    flowli,
+    data,
+  }: { data: { count: number } } & TanStackStartServerFnTools<AppFlowli>) =>
+    flowli.zodJob.run({ count: data.count }),
+);
+
+void saveWithServerFn({
+  data: {
+    count: 1,
+  },
+});
 
 const sharedJobs = {
   sharedJob: job.withContext<AppContext>()("shared_job", {
