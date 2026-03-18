@@ -1,6 +1,6 @@
 {
   "name": "flowli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Flowli is a jobs runtime with a code-first API, first-class execution strategies, runtime-scoped context injection, and pluggable Redis drivers.",
   "keywords": [
     "jobs",

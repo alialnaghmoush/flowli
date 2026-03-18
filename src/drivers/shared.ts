@@ -1,5 +1,7 @@
 import type {
   FlowliDriver,
+  FlowliInspectListOptions,
+  InspectableJobState,
   PersistedJobRecord,
   ScheduleRecord,
 } from "../core/types.js";
@@ -70,7 +72,7 @@ export function createRedisDriver(
         },
       );
 
-      let recovered = 0;
+      const recovered: PersistedJobRecord[] = [];
 
       for (const jobId of activeJobIds) {
         const lease = await commands.get(keys.lease(jobId));
@@ -94,7 +96,7 @@ export function createRedisDriver(
         await writeJob(recoveredRecord);
         await commands.zrem(keys.active, jobId);
         await commands.zadd(keys.pending, now, jobId);
-        recovered += 1;
+        recovered.push(recoveredRecord);
       }
 
       return recovered;
@@ -282,6 +284,35 @@ export function createRedisDriver(
 
       return created;
     },
+    getJob(id) {
+      return readJob(id);
+    },
+    getSchedule(key) {
+      return readSchedule(key);
+    },
+    async getQueueCounts() {
+      const [queued, active, completed, failed, schedules] = await Promise.all([
+        countIndex(keys.pending),
+        countIndex(keys.active),
+        countIndex(keys.completed),
+        countIndex(keys.failed),
+        countIndex(keys.schedulesDue),
+      ]);
+
+      return {
+        queued,
+        active,
+        completed,
+        failed,
+        schedules,
+      };
+    },
+    getJobsByState(state, options) {
+      return listJobsByState(state, options);
+    },
+    getSchedules(options) {
+      return listSchedules(options);
+    },
   };
 
   async function writeJob(record: PersistedJobRecord): Promise<void> {
@@ -294,6 +325,75 @@ export function createRedisDriver(
 
   async function readSchedule(key: string): Promise<ScheduleRecord | null> {
     return decodeJson<ScheduleRecord>(await commands.get(keys.schedule(key)));
+  }
+
+  async function countIndex(key: string): Promise<number> {
+    return (
+      await commands.zrangebyscore(
+        key,
+        Number.NEGATIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+      )
+    ).length;
+  }
+
+  async function listJobsByState(
+    state: InspectableJobState,
+    options?: FlowliInspectListOptions,
+  ): Promise<ReadonlyArray<PersistedJobRecord>> {
+    const jobIds = await commands.zrangebyscore(
+      getStateKey(state),
+      Number.NEGATIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+      normalizeListLimit(options),
+    );
+
+    const jobs = await Promise.all(jobIds.map((jobId) => readJob(jobId)));
+    return jobs.filter((job): job is PersistedJobRecord => job !== null);
+  }
+
+  async function listSchedules(
+    options?: FlowliInspectListOptions,
+  ): Promise<ReadonlyArray<ScheduleRecord>> {
+    const scheduleKeys = await commands.zrangebyscore(
+      keys.schedulesDue,
+      Number.NEGATIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+      normalizeListLimit(options),
+    );
+
+    const schedules = await Promise.all(
+      scheduleKeys.map((scheduleKey) => readSchedule(scheduleKey)),
+    );
+    return schedules.filter(
+      (schedule): schedule is ScheduleRecord => schedule !== null,
+    );
+  }
+
+  function getStateKey(state: InspectableJobState): string {
+    switch (state) {
+      case "queued":
+        return keys.pending;
+      case "active":
+        return keys.active;
+      case "completed":
+        return keys.completed;
+      case "failed":
+        return keys.failed;
+    }
+  }
+
+  function normalizeListLimit(
+    options?: FlowliInspectListOptions,
+  ): { offset: number; count: number } | undefined {
+    if (options?.limit === undefined) {
+      return undefined;
+    }
+
+    return {
+      offset: 0,
+      count: Math.max(options.limit, 0),
+    };
   }
 }
 

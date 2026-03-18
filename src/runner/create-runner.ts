@@ -43,7 +43,14 @@ export function createRunner<
       ticking = true;
       try {
         const now = Date.now();
-        await driver.recoverExpiredLeases(now);
+        const recovered = await driver.recoverExpiredLeases(now);
+        for (const record of recovered) {
+          await options.hooks?.onLeaseRecovered?.(
+            record.id,
+            record.name,
+            record,
+          );
+        }
         await driver.materializeDueSchedules(now, leaseMs);
         let processed = 0;
 

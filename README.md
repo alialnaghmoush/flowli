@@ -20,6 +20,7 @@ Define jobs once. Run them anywhere.
 - [Context vs Meta](#context-vs-meta)
 - [Async Execution](#async-execution)
 - [Runner](#runner)
+- [Inspection And Observability](#inspection-and-observability)
 - [Async Semantics](#async-semantics)
 - [Reusable Predeclared Jobs](#reusable-predeclared-jobs)
 - [Hono](#hono)
@@ -459,6 +460,53 @@ await runner.stop();
 ```
 
 `createRunner()` consumes an existing runtime. It does not recreate jobs or rebuild context.
+
+## Inspection And Observability
+
+Flowli now exposes a read-side inspection surface on the runtime:
+
+```ts
+const job = await flowli.inspect.getJob("job_123");
+const schedule = await flowli.inspect.getSchedule("daily-report");
+const counts = await flowli.inspect.getQueueCounts();
+const queuedJobs = await flowli.inspect.getJobsByState("queued", {
+  limit: 25,
+});
+const schedules = await flowli.inspect.getSchedules({
+  limit: 25,
+});
+```
+
+This gives you enough visibility to:
+
+- inspect retry metadata like `failureCount`, `lastFailedAt`, and `nextRetryAt`
+- power operational logs and lightweight admin pages
+- debug delayed, failed, and completed work without reaching into Redis directly
+
+The runner also supports lifecycle hooks for observability:
+
+```ts
+const runner = createRunner({
+  flowli,
+  hooks: {
+    onJobStarted(jobId, jobName) {
+      logger.info({ event: "job.started", jobId, jobName });
+    },
+    onJobRetryScheduled(jobId, jobName, retryAt, error) {
+      logger.warn({
+        event: "job.retry_scheduled",
+        jobId,
+        jobName,
+        retryAt,
+        error,
+      });
+    },
+    onLeaseRecovered(jobId, jobName) {
+      logger.warn({ event: "job.lease_recovered", jobId, jobName });
+    },
+  },
+});
+```
 
 ## Async Semantics
 

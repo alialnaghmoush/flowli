@@ -105,6 +105,8 @@ export type JobState =
   | "failed"
   | "scheduled";
 
+export type InspectableJobState = Exclude<JobState, "scheduled">;
+
 export interface JobHandlerArgs<TInput, TContext, TMeta> {
   readonly input: TInput;
   readonly ctx: TContext;
@@ -182,7 +184,7 @@ export interface FlowliDriver {
   readonly kind: string;
   enqueue(record: PersistedJobRecord): Promise<JobReceipt>;
   registerSchedule(record: ScheduleRecord): Promise<ScheduleReceipt>;
-  recoverExpiredLeases(now: number): Promise<number>;
+  recoverExpiredLeases(now: number): Promise<ReadonlyArray<PersistedJobRecord>>;
   acquireNextReady(
     now: number,
     leaseMs: number,
@@ -195,6 +197,16 @@ export interface FlowliDriver {
     error: PersistedJobError,
   ): Promise<MarkFailedResult>;
   materializeDueSchedules(now: number, leaseMs: number): Promise<number>;
+  getJob(id: string): Promise<PersistedJobRecord | null>;
+  getSchedule(key: string): Promise<ScheduleRecord | null>;
+  getQueueCounts(): Promise<FlowliQueueCounts>;
+  getJobsByState(
+    state: InspectableJobState,
+    options?: FlowliInspectListOptions,
+  ): Promise<ReadonlyArray<PersistedJobRecord>>;
+  getSchedules(
+    options?: FlowliInspectListOptions,
+  ): Promise<ReadonlyArray<ScheduleRecord>>;
 }
 
 export interface DefineJobsOptions<
@@ -263,12 +275,38 @@ export interface FlowliJobSurface<TJob extends AnyJobDefinition> {
   ): Promise<ScheduleReceipt>;
 }
 
+export interface FlowliInspectListOptions {
+  readonly limit?: number;
+}
+
+export interface FlowliQueueCounts {
+  readonly queued: number;
+  readonly active: number;
+  readonly completed: number;
+  readonly failed: number;
+  readonly schedules: number;
+}
+
+export interface FlowliInspectSurface {
+  getJob(id: string): Promise<PersistedJobRecord | null>;
+  getSchedule(key: string): Promise<ScheduleRecord | null>;
+  getQueueCounts(): Promise<FlowliQueueCounts>;
+  getJobsByState(
+    state: InspectableJobState,
+    options?: FlowliInspectListOptions,
+  ): Promise<ReadonlyArray<PersistedJobRecord>>;
+  getSchedules(
+    options?: FlowliInspectListOptions,
+  ): Promise<ReadonlyArray<ScheduleRecord>>;
+}
+
 export type FlowliRuntime<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,
 > = {
   readonly [TKey in keyof TJobs]: FlowliJobSurface<TJobs[TKey]>;
 } & {
+  readonly inspect: FlowliInspectSurface;
   readonly [FLOWLI_RUNTIME_SYMBOL]: FlowliRuntimeInternals<TJobs, TContext>;
 };
 

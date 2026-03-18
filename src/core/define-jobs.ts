@@ -1,3 +1,4 @@
+import { createInspectSurface } from "../runtime/create-inspect-surface.js";
 import { createJobSurface } from "../runtime/create-job-surface.js";
 import { normalizeJobs } from "../runtime/normalize-jobs.js";
 import { createContextResolver } from "../runtime/resolve-context.js";
@@ -81,6 +82,8 @@ function buildRuntime<
   } satisfies FlowliRuntimeInternals<TJobs, TContext>;
 
   const runtime: Record<string, unknown> = {};
+
+  runtime.inspect = createInspectSurface(internals);
 
   for (const [exportName, definition] of Object.entries(normalized.jobs)) {
     runtime[exportName] = createJobSurface(

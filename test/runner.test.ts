@@ -261,11 +261,63 @@ describe("runner", () => {
     });
 
     await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 2), async () => {
-      expect(await driver.recoverExpiredLeases(Date.now())).toBe(1);
+      await expect(
+        driver.recoverExpiredLeases(Date.now()),
+      ).resolves.toHaveLength(1);
       expect(await runner.runOnce()).toBe(1);
     });
 
     expect(context.calls).toEqual(["recover-me"]);
+  });
+
+  test("runner emits lease recovery hooks before reprocessing recovered jobs", async () => {
+    const clients = createMemoryRedisClients();
+    const context: Context = {
+      calls: [],
+      failures: 0,
+    };
+    const recovered: string[] = [];
+    const task = job.withContext<Context>()("task", {
+      input: v.object({
+        value: v.string(),
+      }),
+      handler: async ({ input, ctx }) => {
+        ctx.calls.push(input.value);
+      },
+    });
+
+    const flowli = defineJobs.withContext<Context>()({
+      jobs: { task },
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "lease-hook",
+      }),
+      context,
+    });
+    const driver = getFlowliRuntimeInternals(flowli).driver!;
+    const runner = createRunner({
+      flowli,
+      leaseMs: 1_000,
+      hooks: {
+        onLeaseRecovered(jobId, jobName) {
+          recovered.push(`${jobName}:${jobId}`);
+        },
+      },
+    });
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 0), async () => {
+      await flowli.task.enqueue({ value: "recover-once" });
+      const acquired = await driver.acquireNextReady(Date.now(), 1_000);
+
+      expect(acquired?.record.state).toBe("active");
+    });
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 2), async () => {
+      expect(await runner.runOnce()).toBe(1);
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0]?.startsWith("task:")).toBe(true);
+      expect(context.calls).toEqual(["recover-once"]);
+    });
   });
 
   test("concurrent schedule materialization stays idempotent", async () => {

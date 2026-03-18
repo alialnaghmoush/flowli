@@ -7,6 +7,12 @@ export function normalizeJobs<TJobs extends JobsRecord>(
   readonly jobs: TJobs;
   readonly jobsByName: Map<string, AnyJobDefinition>;
 } {
+  if (Object.hasOwn(jobs, "inspect")) {
+    throw new FlowliDefinitionError(
+      'Job export name "inspect" is reserved by the Flowli runtime.',
+    );
+  }
+
   const jobsByName = new Map<string, AnyJobDefinition>();
 
   for (const [exportName, definition] of Object.entries(jobs)) {

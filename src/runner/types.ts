@@ -3,6 +3,7 @@ import type {
   FlowliRuntime,
   JobsRecord,
   PersistedJobError,
+  PersistedJobRecord,
 } from "../core/types.js";
 
 export interface RunnerHooks {
@@ -24,6 +25,11 @@ export interface RunnerHooks {
     jobName: string,
     retryAt: number,
     error: PersistedJobError,
+  ) => void | Promise<void>;
+  readonly onLeaseRecovered?: (
+    jobId: string,
+    jobName: string,
+    record: PersistedJobRecord,
   ) => void | Promise<void>;
 }
 

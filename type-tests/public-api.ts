@@ -97,6 +97,12 @@ void flowli.zodJob.schedule({
   },
 });
 
+void flowli.inspect.getJob("job_1");
+void flowli.inspect.getSchedule("daily_report");
+void flowli.inspect.getQueueCounts();
+void flowli.inspect.getJobsByState("queued", { limit: 10 });
+void flowli.inspect.getSchedules({ limit: 10 });
+
 type _honoVariables = Expect<
   Equal<HonoFlowliVariables<typeof flowli>, { flowli: typeof flowli }>
 >;

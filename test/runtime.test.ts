@@ -4,9 +4,12 @@ import * as v from "valibot";
 import {
   defineJobs,
   FlowliDefinitionError,
+  FlowliDriverError,
   FlowliStrategyError,
   job,
 } from "../src/index.js";
+import { ioredisDriver } from "../src/ioredis.js";
+import { createMemoryRedisClients } from "./helpers/memory-redis.js";
 
 type AppContext = {
   logger: {
@@ -162,5 +165,93 @@ describe("runtime", () => {
     await expect(
       flowli.greet.enqueue({ name: "world" }),
     ).rejects.toBeInstanceOf(FlowliStrategyError);
+  });
+
+  test("inspect exposes jobs, schedules, and queue counts through the runtime", async () => {
+    const clients = createMemoryRedisClients();
+    const flowli = defineJobs({
+      context: {},
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "inspect",
+      }),
+      jobs: ({ job }) => ({
+        greet: job("greet", {
+          input: v.object({
+            name: v.string(),
+          }),
+          handler: async ({ input }) => input.name,
+        }),
+      }),
+    });
+
+    const receipt = await flowli.greet.enqueue({ name: "queued" });
+    const schedule = await flowli.greet.schedule({
+      key: "daily-greet",
+      cron: "0 * * * *",
+      input: {
+        name: "scheduled",
+      },
+    });
+
+    await expect(flowli.inspect.getJob(receipt.id)).resolves.toMatchObject({
+      id: receipt.id,
+      name: "greet",
+      state: "queued",
+    });
+    await expect(
+      flowli.inspect.getSchedule(schedule.key),
+    ).resolves.toMatchObject({
+      key: schedule.key,
+      name: "greet",
+      cron: "0 * * * *",
+    });
+    await expect(flowli.inspect.getQueueCounts()).resolves.toEqual({
+      queued: 1,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      schedules: 1,
+    });
+    await expect(
+      flowli.inspect.getJobsByState("queued"),
+    ).resolves.toMatchObject([{ id: receipt.id }]);
+    await expect(flowli.inspect.getSchedules()).resolves.toMatchObject([
+      { key: "daily-greet" },
+    ]);
+  });
+
+  test("inspect requires a configured driver", async () => {
+    const flowli = defineJobs({
+      context: {},
+      jobs: ({ job }) => ({
+        greet: job("greet", {
+          input: v.object({
+            name: v.string(),
+          }),
+          handler: ({ input }) => input.name,
+        }),
+      }),
+    });
+
+    await expect(flowli.inspect.getQueueCounts()).rejects.toBeInstanceOf(
+      FlowliDriverError,
+    );
+  });
+
+  test('job export name "inspect" is reserved', () => {
+    expect(() =>
+      defineJobs({
+        context: {},
+        jobs: ({ job }) => ({
+          inspect: job("inspect_job", {
+            input: v.object({
+              name: v.string(),
+            }),
+            handler: ({ input }) => input.name,
+          }),
+        }),
+      }),
+    ).toThrow(FlowliDefinitionError);
   });
 });
