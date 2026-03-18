@@ -23,6 +23,7 @@ Define jobs once. Run them anywhere.
 - [Next.js](#nextjs)
 - [TanStack Start](#tanstack-start)
 - [Install](#install)
+- [Production](#production)
 - [What Flowli Optimizes For](#what-flowli-optimizes-for)
 - [Exports](#exports)
 - [Status](#status)
@@ -43,7 +44,7 @@ Flowli is built around a different model:
 - choose execution strategy per call: `run`, `enqueue`, `delay`, `schedule`
 - swap Redis clients without rewriting job definitions
 
-It is not a BullMQ clone. It is a typed runtime for background and deferred execution.
+It is a typed runtime for background and deferred execution with a code-first, framework-agnostic design.
 
 ```mermaid
 flowchart LR
@@ -719,6 +720,60 @@ bun add next
 bun add @tanstack/react-start
 ```
 
+Optional Redis client peers:
+
+```bash
+bun add ioredis
+```
+
+```bash
+bun add redis
+```
+
+Real Redis integration testing:
+
+```bash
+bun run docker:up
+```
+
+```bash
+bun run test:redis:docker
+```
+
+```bash
+bun run docker:down
+```
+
+## Production
+
+Flowli is close to production use, but its async model is explicit and you should deploy it like queue infrastructure, not just a helper library.
+
+Recommended production baseline:
+
+- run a dedicated `createRunner({ flowli })` process
+- use Redis/Valkey/Dragonfly with persistence configured appropriately for your durability needs
+- keep handlers idempotent because persisted execution is at-least-once
+- tune `leaseMs`, `concurrency`, and `maxJobsPerTick` to match handler duration and load
+- monitor failed jobs and handler error rates
+- validate delayed and scheduled workloads against real infrastructure before rollout
+
+Operational notes:
+
+- `run()` is in-process and does not depend on Redis
+- `enqueue()`, `delay()`, and `schedule()` depend on a configured driver
+- async work is lease-based and can be retried after failures or lease recovery
+- if a runner crashes after reserving work, expired leases are recovered and jobs are re-queued
+- schedule execution is UTC-based in v1
+
+Suggested rollout plan:
+
+1. Start with `run()` in app code and tests.
+2. Enable `enqueue()` with one runner process.
+3. Verify handler idempotency and retry behavior.
+4. Add delayed and scheduled workloads after observing real job throughput and failure patterns.
+
+For local real-backend validation, Flowli ships a Redis setup in [docker-compose.yml](/Users/alialnaghmoush/Documents/GitHub/flowli/docker-compose.yml). The default local test URL is `redis://127.0.0.1:6379/0`, which matches `bun run test:redis:docker`.
+
 ## What Flowli Optimizes For
 
 - small API surface
@@ -752,6 +807,7 @@ Flowli v1 currently includes:
 - TanStack Start helpers
 - explicit runner support
 - Hono middleware
+- lease recovery for expired active jobs
 - npm and JSR publish configuration
 
 If you want the shortest description:

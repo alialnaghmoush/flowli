@@ -42,7 +42,9 @@ export function createRunner<
 
       ticking = true;
       try {
-        await driver.materializeDueSchedules(Date.now(), leaseMs);
+        const now = Date.now();
+        await driver.recoverExpiredLeases(now);
+        await driver.materializeDueSchedules(now, leaseMs);
         let processed = 0;
 
         while (processed < maxJobsPerTick) {

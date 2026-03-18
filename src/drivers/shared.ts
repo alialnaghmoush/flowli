@@ -59,6 +59,46 @@ export function createRedisDriver(
       await commands.zadd(keys.schedulesDue, record.nextRunAt, record.key);
       return createScheduleReceipt(record);
     },
+    async recoverExpiredLeases(now) {
+      const activeJobIds = await commands.zrangebyscore(
+        keys.active,
+        Number.NEGATIVE_INFINITY,
+        now,
+        {
+          offset: 0,
+          count: 100,
+        },
+      );
+
+      let recovered = 0;
+
+      for (const jobId of activeJobIds) {
+        const lease = await commands.get(keys.lease(jobId));
+        if (lease) {
+          continue;
+        }
+
+        const record = await readJob(jobId);
+        if (!record) {
+          await commands.zrem(keys.active, jobId);
+          continue;
+        }
+
+        const recoveredRecord: PersistedJobRecord = {
+          ...record,
+          state: "queued",
+          scheduledFor: now,
+          updatedAt: now,
+        };
+
+        await writeJob(recoveredRecord);
+        await commands.zrem(keys.active, jobId);
+        await commands.zadd(keys.pending, now, jobId);
+        recovered += 1;
+      }
+
+      return recovered;
+    },
     async acquireNextReady(now, leaseMs) {
       const candidates = await commands.zrangebyscore(
         keys.pending,

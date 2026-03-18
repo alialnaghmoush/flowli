@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as v from "valibot";
 
+import { getFlowliRuntimeInternals } from "../src/core/define-jobs.js";
 import { defineJobs, job } from "../src/index.js";
 import { ioredisDriver } from "../src/ioredis.js";
 import { createRunner } from "../src/runner.js";
@@ -138,6 +139,163 @@ describe("runner", () => {
 
     await withFakeNow(Date.UTC(2026, 0, 1, 0, 5, 1), async () => {
       expect(await runner.runOnce()).toBe(0);
+    });
+  });
+
+  test("concurrent runners do not process the same queued job twice", async () => {
+    const clients = createMemoryRedisClients();
+    const context: Context = {
+      calls: [],
+      failures: 0,
+    };
+    const task = job.withContext<Context>()("task", {
+      input: v.object({
+        value: v.string(),
+      }),
+      handler: async ({ input, ctx }) => {
+        await Promise.resolve();
+        ctx.calls.push(input.value);
+      },
+    });
+
+    const flowli = defineJobs.withContext<Context>()({
+      jobs: { task },
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "concurrent",
+      }),
+      context,
+    });
+
+    const runnerA = createRunner({ flowli, leaseMs: 5_000 });
+    const runnerB = createRunner({ flowli, leaseMs: 5_000 });
+
+    await flowli.task.enqueue({ value: "once" });
+
+    const [processedA, processedB] = await Promise.all([
+      runnerA.runOnce(),
+      runnerB.runOnce(),
+    ]);
+
+    expect(processedA + processedB).toBe(1);
+    expect(context.calls).toEqual(["once"]);
+  });
+
+  test("driver prevents duplicate reservation for the same pending job", async () => {
+    const clients = createMemoryRedisClients();
+    const flowli = defineJobs({
+      jobs: ({ job }) => ({
+        task: job("task", {
+          input: v.object({
+            value: v.string(),
+          }),
+          handler: async () => undefined,
+        }),
+      }),
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "reservation",
+      }),
+      context: {},
+    });
+
+    await flowli.task.enqueue({ value: "job-1" });
+    const driver = getFlowliRuntimeInternals(flowli).driver!;
+
+    const [first, second] = await Promise.all([
+      driver.acquireNextReady(Date.now(), 5_000),
+      driver.acquireNextReady(Date.now(), 5_000),
+    ]);
+
+    expect(Boolean(first)).toBe(true);
+    expect(second).toBeNull();
+  });
+
+  test("expired active leases are recovered and re-queued", async () => {
+    const clients = createMemoryRedisClients();
+    const context: Context = {
+      calls: [],
+      failures: 0,
+    };
+    const task = job.withContext<Context>()("task", {
+      input: v.object({
+        value: v.string(),
+      }),
+      handler: async ({ input, ctx }) => {
+        ctx.calls.push(input.value);
+      },
+    });
+
+    const flowli = defineJobs.withContext<Context>()({
+      jobs: { task },
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "lease-recovery",
+      }),
+      context,
+    });
+    const driver = getFlowliRuntimeInternals(flowli).driver!;
+    const runner = createRunner({
+      flowli,
+      leaseMs: 1_000,
+    });
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 0), async () => {
+      await flowli.task.enqueue({ value: "recover-me" });
+      const acquired = await driver.acquireNextReady(Date.now(), 1_000);
+
+      expect(acquired?.record.state).toBe("active");
+    });
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 2), async () => {
+      expect(await driver.recoverExpiredLeases(Date.now())).toBe(1);
+      expect(await runner.runOnce()).toBe(1);
+    });
+
+    expect(context.calls).toEqual(["recover-me"]);
+  });
+
+  test("concurrent schedule materialization stays idempotent", async () => {
+    const clients = createMemoryRedisClients();
+    const flowli = defineJobs({
+      jobs: ({ job }) => ({
+        audit: job("audit", {
+          input: v.object({
+            value: v.string(),
+          }),
+          handler: async () => undefined,
+        }),
+      }),
+      driver: ioredisDriver({
+        client: clients.ioredis,
+        prefix: "schedule-idempotency",
+      }),
+      context: {},
+    });
+    const driver = getFlowliRuntimeInternals(flowli).driver!;
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 0, 0), async () => {
+      await flowli.audit.schedule({
+        cron: "*/5 * * * *",
+        input: {
+          value: "scheduled-once",
+        },
+      });
+    });
+
+    await withFakeNow(Date.UTC(2026, 0, 1, 0, 5, 0), async () => {
+      const [materializedA, materializedB] = await Promise.all([
+        driver.materializeDueSchedules(Date.now(), 5_000),
+        driver.materializeDueSchedules(Date.now(), 5_000),
+      ]);
+
+      expect(materializedA + materializedB).toBe(1);
+
+      const acquired = await driver.acquireNextReady(Date.now(), 5_000);
+      expect(acquired?.record.input).toEqual({
+        value: "scheduled-once",
+      });
+      expect(await driver.acquireNextReady(Date.now(), 5_000)).toBeNull();
     });
   });
 });

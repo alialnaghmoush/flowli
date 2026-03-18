@@ -1,7 +1,7 @@
 {
   "name": "flowli",
   "version": "0.1.1",
-  "description": "A typed jobs runtime for TypeScript.",
+  "description": "Flowli is a jobs runtime with a code-first API, first-class execution strategies, runtime-scoped context injection, and pluggable Redis drivers.",
   "keywords": [
     "jobs",
     "queue",
@@ -33,6 +33,71 @@
     "README.md",
     "jsr.json"
   ],
+  "scripts": {
+    "build:js": "bun build ./src/index.ts ./src/ioredis.ts ./src/redis.ts ./src/bun-redis.ts ./src/next.ts ./src/tanstack-start.ts ./src/hono.ts ./src/runner.ts --outdir dist --root ./src --target node --format esm",
+    "build:types": "tsc -p tsconfig.build.json",
+    "build": "bun run build:js && bun run build:types",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit",
+    "prepack": "bun run verify",
+    "pack:npm": "npm pack --dry-run --cache ./.npm-cache",
+    "publish:npm-d": "npm publish --dry-run --cache ./.npm-cache",
+    "publish:npm": "npm publish --cache ./.npm-cache",
+    "publish:jsr-d": "npx jsr publish --dry-run",
+    "publish:jsr": "npx jsr publish",
+    "publish:all-d": "bun run publish:npm-d && bun run publish:jsr-d",
+    "publish:all": "bun run publish:npm && bun run publish:jsr",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down -v",
+    "test:redis:docker": "FLOWLI_REDIS_URL=redis://127.0.0.1:6379/0 bun run test:redis",
+    "test": "bun test",
+    "test:redis": "bun test test/redis.integration.test.ts",
+    "verify:publish": "bun run pack:npm",
+    "verify": "bun run lint && bun run check && bun run build && bun test"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.7",
+    "@types/bun": "latest",
+    "ioredis": "^5.10.0",
+    "redis": "^5.11.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@tanstack/react-start": "^1.0.0-rc || ^1",
+    "ioredis": "",
+    "next": "^15 || ^16",
+    "redis": "",
+    "typescript": "^5",
+    "valibot": "^1.3.0",
+    "zod": "^4.3.6"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-start": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "redis": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    },
+    "zod": {
+      "optional": true
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -65,56 +130,6 @@
     "./runner": {
       "types": "./dist/runner.d.ts",
       "import": "./dist/runner.js"
-    }
-  },
-  "scripts": {
-    "build:js": "bun build ./src/index.ts ./src/ioredis.ts ./src/redis.ts ./src/bun-redis.ts ./src/next.ts ./src/tanstack-start.ts ./src/hono.ts ./src/runner.ts --outdir dist --root ./src --target node --format esm",
-    "build:types": "tsc -p tsconfig.build.json",
-    "build": "bun run build:js && bun run build:types",
-    "format": "biome format --write .",
-    "lint": "biome check .",
-    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit",
-    "prepack": "bun run verify",
-    "pack:npm": "npm pack --dry-run --cache ./.npm-cache",
-    "publish:npm-d": "npm publish --dry-run --cache ./.npm-cache",
-    "publish:npm": "npm publish --cache ./.npm-cache",
-    "publish:jsr-d": "npx jsr publish --dry-run",
-    "publish:jsr": "npx jsr publish",
-    "publish:all-d": "bun run publish:npm-d && bun run publish:jsr-d",
-    "publish:all": "bun run publish:npm && bun run publish:jsr",
-    "test": "bun test",
-    "verify": "bun run lint && bun run check && bun run build && bun test"
-  },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.7",
-    "@types/bun": "latest",
-    "typescript": "^5.9.3"
-  },
-  "peerDependencies": {
-    "@tanstack/react-start": "^1.0.0-rc || ^1",
-    "next": "^15 || ^16",
-    "typescript": "^5",
-    "valibot": "^1.3.0",
-    "zod": "^4.3.6"
-  },
-  "peerDependenciesMeta": {
-    "@tanstack/react-start": {
-      "optional": true
-    },
-    "next": {
-      "optional": true
-    },
-    "typescript": {
-      "optional": true
-    },
-    "valibot": {
-      "optional": true
-    },
-    "zod": {
-      "optional": true
     }
   }
 }

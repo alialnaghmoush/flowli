@@ -175,6 +175,7 @@ export interface FlowliDriver {
   readonly kind: string;
   enqueue(record: PersistedJobRecord): Promise<JobReceipt>;
   registerSchedule(record: ScheduleRecord): Promise<ScheduleReceipt>;
+  recoverExpiredLeases(now: number): Promise<number>;
   acquireNextReady(
     now: number,
     leaseMs: number,
