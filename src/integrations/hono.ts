@@ -23,7 +23,10 @@ export function honoJobs<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,
   TKey extends string = "flowli",
->(flowli: FlowliRuntime<TJobs, TContext>, options: HonoJobsOptions<TKey> = {}) {
+>(
+  flowli: FlowliRuntime<TJobs, TContext>,
+  options: HonoJobsOptions<TKey> = {},
+): (context: HonoLikeContext, next: HonoLikeNext) => Promise<void> {
   const key = options.key ?? ("flowli" as TKey);
 
   return async (

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://jsr.io/schema/config-file.v1.json",
+  "name": "@alialnaghmoush/flowli",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ioredis": "./src/ioredis.ts",
+    "./redis": "./src/redis.ts",
+    "./bun-redis": "./src/bun-redis.ts",
+    "./next": "./src/next.ts",
+    "./hono": "./src/hono.ts",
+    "./runner": "./src/runner.ts"
+  },
+  "include": [
+    "README.md",
+    "src/**/*.ts",
+    "package.json"
+  ],
+  "exclude": [
+    "dist/",
+    "node_modules/",
+    "test/",
+    "type-tests/"
+  ]
+}

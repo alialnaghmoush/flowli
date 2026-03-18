@@ -29,6 +29,15 @@ type JobFactory = {
   ) => JobDefinition<TInputSchema, TMetaSchema, TContext, TResult>;
 };
 
+export type ContextualJobFactory<TContext extends FlowliContextRecord> = <
+  TInputSchema extends StandardSchemaV1<any, any>,
+  TMetaSchema extends StandardSchemaV1<any, any> | undefined,
+  TResult,
+>(
+  name: string,
+  options: JobOptions<TInputSchema, TMetaSchema, TContext, TResult>,
+) => JobDefinition<TInputSchema, TMetaSchema, TContext, TResult>;
+
 function createJob<
   TContext extends FlowliContextRecord,
   TInputSchema extends StandardSchemaV1<any, any>,
@@ -65,6 +74,6 @@ export const job: JobFactory = Object.assign(createJob, {
 
 export function createContextualJobFactory<
   TContext extends FlowliContextRecord,
->() {
+>(): ContextualJobFactory<TContext> {
   return job.withContext<TContext>();
 }

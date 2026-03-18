@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { z } from "zod";
 import type { HonoFlowliVariables } from "../src/hono.js";
 import { defineJobs, job } from "../src/index.js";
+import { nextAction, nextRoute } from "../src/next.js";
 
 type Equal<Left, Right> =
   (<TValue>() => TValue extends Left ? 1 : 2) extends <
@@ -93,6 +94,35 @@ void flowli.zodJob.schedule({
 type _honoVariables = Expect<
   Equal<HonoFlowliVariables<typeof flowli>, { flowli: typeof flowli }>
 >;
+
+const nextGet = nextRoute(flowli, async ({ flowli, params, request }) => {
+  request.method satisfies string;
+  params?.id satisfies string | readonly string[] | undefined;
+  return Response.json({
+    value: await flowli.valibotJob.run(
+      { id: typeof params?.id === "string" ? params.id : "fallback" },
+      {
+        meta: {
+          requestId: "req_2",
+        },
+      },
+    ),
+  });
+});
+
+void nextGet(new Request("https://flowli.dev"), {
+  params: Promise.resolve({ id: "todo_2" }),
+});
+
+const createTodoAction = nextAction(
+  flowli,
+  async ({ flowli }, formData: FormData) => {
+    const count = Number(formData.get("count") ?? "0");
+    return flowli.zodJob.run({ count });
+  },
+);
+
+void createTodoAction(new FormData());
 
 const sharedJobs = {
   sharedJob: job.withContext<AppContext>()("shared_job", {

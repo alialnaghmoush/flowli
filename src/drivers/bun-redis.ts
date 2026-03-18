@@ -1,3 +1,4 @@
+import type { FlowliDriver } from "../core/types.js";
 import { createRedisDriver, type RedisCommandAdapter } from "./shared.js";
 
 export interface BunRedisLikeClient {
@@ -23,7 +24,7 @@ export interface BunRedisDriverOptions {
   readonly prefix?: string;
 }
 
-export function bunRedisDriver(options: BunRedisDriverOptions) {
+export function bunRedisDriver(options: BunRedisDriverOptions): FlowliDriver {
   return createRedisDriver({
     kind: "bun-redis",
     ...(options.prefix ? { prefix: options.prefix } : {}),

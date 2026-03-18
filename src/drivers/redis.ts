@@ -1,3 +1,4 @@
+import type { FlowliDriver } from "../core/types.js";
 import { createRedisDriver, type RedisCommandAdapter } from "./shared.js";
 
 export interface NodeRedisLikeClient {
@@ -26,7 +27,7 @@ export interface RedisDriverOptions {
   readonly prefix?: string;
 }
 
-export function redisDriver(options: RedisDriverOptions) {
+export function redisDriver(options: RedisDriverOptions): FlowliDriver {
   return createRedisDriver({
     kind: "redis",
     ...(options.prefix ? { prefix: options.prefix } : {}),

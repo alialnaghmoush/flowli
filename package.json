@@ -2,11 +2,35 @@
   "name": "flowli",
   "version": "0.1.0",
   "description": "A typed jobs runtime for TypeScript.",
+  "keywords": [
+    "jobs",
+    "queue",
+    "redis",
+    "nextjs",
+    "typescript",
+    "background-jobs",
+    "scheduler"
+  ],
+  "homepage": "https://github.com/alialnaghmoush/flowli#readme",
+  "bugs": {
+    "url": "https://github.com/alialnaghmoush/flowli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alialnaghmoush/flowli.git"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "type": "module",
   "sideEffects": false,
+  "packageManager": "bun@1.3.10",
+  "engines": {
+    "node": ">=18"
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "jsr.json"
   ],
   "exports": {
     ".": {
@@ -25,6 +49,10 @@
       "types": "./dist/bun-redis.d.ts",
       "import": "./dist/bun-redis.js"
     },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js"
+    },
     "./hono": {
       "types": "./dist/hono.d.ts",
       "import": "./dist/hono.js"
@@ -35,12 +63,25 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build:js": "bun build ./src/index.ts ./src/ioredis.ts ./src/redis.ts ./src/bun-redis.ts ./src/next.ts ./src/hono.ts ./src/runner.ts --outdir dist --root ./src --target node --format esm",
+    "build:types": "tsc -p tsconfig.build.json",
+    "build": "bun run build:js && bun run build:types",
     "format": "biome format --write .",
     "lint": "biome check .",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit",
+    "prepack": "bun run verify",
+    "pack:npm": "npm pack --dry-run --cache ./.npm-cache",
+    "publish:npm-d": "npm publish --dry-run --cache ./.npm-cache",
+    "publish:npm": "npm publish --cache ./.npm-cache",
+    "publish:jsr-d": "npx jsr publish --dry-run",
+    "publish:jsr": "npx jsr publish",
+    "publish:all-d": "bun run publish:npm-d && bun run publish:jsr-d",
+    "publish:all": "bun run publish:npm && bun run publish:jsr",
     "test": "bun test",
     "verify": "bun run lint && bun run check && bun run build && bun test"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
@@ -48,11 +89,15 @@
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
+    "next": "^15 || ^16",
     "typescript": "^5",
     "valibot": "^1.3.0",
     "zod": "^4.3.6"
   },
   "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
     "typescript": {
       "optional": true
     },

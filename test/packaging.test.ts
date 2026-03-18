@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 describe("packaging", () => {
-  test("root build stays isolated from drivers, hono, and runner", async () => {
+  test("root build stays isolated from drivers, next, hono, and runner", async () => {
     execFileSync("bun", ["run", "build"], {
       cwd: process.cwd(),
       stdio: "inherit",
@@ -16,6 +16,7 @@ describe("packaging", () => {
     expect(rootFile.includes("./ioredis.js")).toBe(false);
     expect(rootFile.includes("./redis.js")).toBe(false);
     expect(rootFile.includes("./bun-redis.js")).toBe(false);
+    expect(rootFile.includes("./next.js")).toBe(false);
     expect(rootFile.includes("./hono.js")).toBe(false);
     expect(rootFile.includes("./runner.js")).toBe(false);
 
@@ -24,6 +25,7 @@ describe("packaging", () => {
       "ioredis.js",
       "redis.js",
       "bun-redis.js",
+      "next.js",
       "hono.js",
       "runner.js",
     ]) {
