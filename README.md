@@ -2,6 +2,8 @@
 
 **Typed jobs for modern TypeScript backends.**
 
+[npm](https://www.npmjs.com/package/flowli) · [JSR](https://jsr.io/@alialnaghmoush/flowli) · [GitHub](https://github.com/alialnaghmoush/flowli)
+
 Flowli is a jobs runtime with a code-first API, first-class execution strategies, runtime-scoped context injection, and pluggable Redis drivers.
 
 Define jobs once. Run them anywhere.
@@ -9,6 +11,7 @@ Define jobs once. Run them anywhere.
 ## Navigate
 
 - [Why Flowli](#why-flowli)
+- [Compare](#compare)
 - [What It Feels Like](#what-it-feels-like)
 - [The Core Idea](#the-core-idea)
 - [Primary Authoring Path](#primary-authoring-path)
@@ -46,6 +49,30 @@ Flowli is built around a different model:
 
 It is a typed runtime for background and deferred execution with a code-first, framework-agnostic design.
 
+## Compare
+
+Choose Flowli when you want:
+
+- application-first jobs authored in code, not in a dashboard
+- a single runtime that supports both direct execution and persisted async work
+- typed `context` injection without framework lock-in
+- pluggable Redis clients behind a small API surface
+
+Flowli vs BullMQ:
+
+- Flowli centers the typed job-definition experience; BullMQ centers queue primitives and worker infrastructure
+- Flowli makes `run()` a first-class in-process path; BullMQ is primarily queue-first
+
+Flowli vs Trigger.dev:
+
+- Flowli stays library-first and infrastructure-light
+- Trigger.dev is stronger when you want a hosted platform, dashboard, and workflow operations out of the box
+
+Flowli vs Inngest:
+
+- Flowli is better suited when you want application-local jobs and direct runtime wiring
+- Inngest is stronger when you want event-first workflows across services
+
 ```mermaid
 flowchart LR
   App["App Code<br/>Routes, Services, Scripts, Tests"] --> Runtime["defineJobs()<br/>Flowli Runtime"]
@@ -66,93 +93,9 @@ flowchart LR
 ## What It Feels Like
 
 ```ts
-// src/flowli/jobs/create-audit-log.ts
 import * as v from "valibot";
-import { job } from "flowli";
-import type { AppContext } from "..";
-
-export const auditLogSchema = v.object({
-  entityType: v.string(),
-  entityId: v.string(),
-  action: v.string(),
-  message: v.string(),
-});
-
-export const auditLogMeta = v.object({
-  requestId: v.string(),
-  actorId: v.optional(v.string()),
-});
-
-export const createAuditLog = job.withContext<AppContext>()(
-  "create_audit_log",
-  {
-    input: auditLogSchema,
-    meta: auditLogMeta,
-    handler: async ({ input, ctx, meta }) => {
-      await ctx.db.insert(ctx.schema.auditLogs).values({
-        entityType: input.entityType,
-        entityId: input.entityId,
-        action: input.action,
-        message: input.message,
-        requestId: meta?.requestId,
-        actorId: meta?.actorId ?? null,
-      });
-
-      ctx.logger.info({
-        job: "create_audit_log",
-        requestId: meta?.requestId,
-        entityId: input.entityId,
-      });
-    },
-  },
-);
-```
-
-```ts
-// src/flowli/jobs/send-notification-email.ts
-import * as v from "valibot";
-import { job } from "flowli";
-import type { AppContext } from "..";
-
-export const notificationEmailSchema = v.object({
-  email: v.string(),
-  subject: v.string(),
-  message: v.string(),
-});
-
-export const sendNotificationEmail = job.withContext<AppContext>()(
-  "send_notification_email",
-  {
-    input: notificationEmailSchema,
-    handler: async ({ input, ctx }) => {
-      await ctx.mailer.send({
-        to: input.email,
-        subject: input.subject,
-        text: input.message,
-      });
-    },
-  },
-);
-```
-
-```ts
-// src/flowli/jobs/index.ts
-export * from "./create-audit-log";
-export * from "./send-notification-email";
-```
-
-```ts
-// src/flowli/index.ts
 import { defineJobs } from "flowli";
 import { ioredisDriver } from "flowli/ioredis";
-import * as jobs from "./jobs";
-
-export type AppContext = {
-  db: typeof db;
-  schema: typeof schema;
-  logger: typeof logger;
-  mailer: typeof mailer;
-};
 
 export const flowli = defineJobs({
   driver: ioredisDriver({
@@ -165,7 +108,59 @@ export const flowli = defineJobs({
     logger,
     mailer,
   }),
-  jobs,
+  jobs: ({ job }) => {
+    const auditLogSchema = v.object({
+      entityType: v.string(),
+      entityId: v.string(),
+      action: v.string(),
+      message: v.string(),
+    });
+
+    const auditLogMetaSchema = v.object({
+      requestId: v.string(),
+      actorId: v.optional(v.string()),
+    });
+
+    const notificationEmailSchema = v.object({
+      email: v.string(),
+      subject: v.string(),
+      message: v.string(),
+    });
+
+    return {
+      createAuditLog: job("create_audit_log", {
+        input: auditLogSchema,
+        meta: auditLogMetaSchema,
+        handler: async ({ input, ctx, meta }) => {
+          await ctx.db.insert(ctx.schema.auditLogs).values({
+            entityType: input.entityType,
+            entityId: input.entityId,
+            action: input.action,
+            message: input.message,
+            requestId: meta?.requestId,
+            actorId: meta?.actorId ?? null,
+          });
+
+          ctx.logger.info({
+            job: "create_audit_log",
+            requestId: meta?.requestId,
+            entityId: input.entityId,
+          });
+        },
+      }),
+
+      sendNotificationEmail: job("send_notification_email", {
+        input: notificationEmailSchema,
+        handler: async ({ input, ctx }) => {
+          await ctx.mailer.send({
+            to: input.email,
+            subject: input.subject,
+            text: input.message,
+          });
+        },
+      }),
+    };
+  },
 });
 ```
 
@@ -237,62 +232,44 @@ flowchart TD
 The canonical Flowli path is runtime-first:
 
 ```ts
-// src/flowli/jobs/create-audit-log.ts
-import * as v from "valibot";
-import { job } from "flowli";
-import type { AppContext } from "..";
-
-export const auditLogSchema = v.object({
-  entityId: v.string(),
-  action: v.string(),
-});
-
-export const auditLogMeta = v.object({
-  requestId: v.string(),
-});
-
-export const createAuditLog = job.withContext<AppContext>()(
-  "create_audit_log",
-  {
-    input: auditLogSchema,
-    meta: auditLogMeta,
-    handler: async ({ input, ctx, meta }) => {
-      await ctx.db.insert("audit_logs").values({
-        entityId: input.entityId,
-        action: input.action,
-        requestId: meta?.requestId,
-      });
-
-      ctx.logger.info({
-        entityId: input.entityId,
-        action: input.action,
-      });
-    },
-  },
-);
-```
-
-```ts
-// src/flowli/jobs/index.ts
-export * from "./create-audit-log";
-```
-
-```ts
 // src/flowli/index.ts
+import * as v from "valibot";
 import { defineJobs } from "flowli";
-import * as jobs from "./jobs";
-
-export type AppContext = {
-  logger: typeof logger;
-  db: typeof db;
-};
 
 export const flowli = defineJobs({
   context: {
     logger,
     db,
   },
-  jobs,
+  jobs: ({ job }) => {
+    const auditLogSchema = v.object({
+      entityId: v.string(),
+      action: v.string(),
+    });
+
+    const auditLogMetaSchema = v.object({
+      requestId: v.string(),
+    });
+
+    return {
+      createAuditLog: job("create_audit_log", {
+        input: auditLogSchema,
+        meta: auditLogMetaSchema,
+        handler: async ({ input, ctx, meta }) => {
+          await ctx.db.insert("audit_logs").values({
+            entityId: input.entityId,
+            action: input.action,
+            requestId: meta?.requestId,
+          });
+
+          ctx.logger.info({
+            entityId: input.entityId,
+            action: input.action,
+          });
+        },
+      }),
+    };
+  },
 });
 ```
 
@@ -407,43 +384,9 @@ In short:
 To persist jobs, add a driver:
 
 ```ts
-// src/flowli/jobs/send-email.ts
 import * as v from "valibot";
-import { job } from "flowli";
-import type { AppContext } from "..";
-
-export const emailInputSchema = v.object({
-  email: v.string(),
-  subject: v.string(),
-});
-
-export const sendEmail = job.withContext<AppContext>()("send_email", {
-  input: emailInputSchema,
-  handler: async ({ input, ctx }) => {
-    await ctx.mailer.send({
-      to: input.email,
-      subject: input.subject,
-    });
-  },
-});
-```
-
-```ts
-// src/flowli/jobs/index.ts
-export * from "./send-email";
-```
-
-```ts
-// src/flowli/index.ts
 import { defineJobs } from "flowli";
 import { ioredisDriver } from "flowli/ioredis";
-import * as jobs from "./jobs";
-
-export type AppContext = {
-  db: typeof db;
-  logger: typeof logger;
-  mailer: typeof mailer;
-};
 
 export const flowli = defineJobs({
   driver: ioredisDriver({
@@ -455,7 +398,24 @@ export const flowli = defineJobs({
     logger,
     mailer,
   }),
-  jobs,
+  jobs: ({ job }) => {
+    const emailInputSchema = v.object({
+      email: v.string(),
+      subject: v.string(),
+    });
+
+    return {
+      sendEmail: job("send_email", {
+        input: emailInputSchema,
+        handler: async ({ input, ctx }) => {
+          await ctx.mailer.send({
+            to: input.email,
+            subject: input.subject,
+          });
+        },
+      }),
+    };
+  },
 });
 ```
 
