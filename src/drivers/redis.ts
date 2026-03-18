@@ -1,6 +1,7 @@
 import type { FlowliDriver } from "../core/types.js";
 import { createRedisDriver, type RedisCommandAdapter } from "./shared.js";
 
+/** The subset of a node-redis client Flowli requires. */
 export interface NodeRedisLikeClient {
   get(key: string): Promise<string | null>;
   set(
@@ -22,11 +23,13 @@ export interface NodeRedisLikeClient {
   ): Promise<string[]>;
 }
 
+/** Options for creating the `flowli/redis` driver. */
 export interface RedisDriverOptions {
   readonly client: NodeRedisLikeClient;
   readonly prefix?: string;
 }
 
+/** Creates a Flowli driver backed by a node-redis-compatible client. */
 export function redisDriver(options: RedisDriverOptions): FlowliDriver {
   return createRedisDriver({
     kind: "redis",
@@ -35,6 +38,7 @@ export function redisDriver(options: RedisDriverOptions): FlowliDriver {
   });
 }
 
+/** Adapts node-redis commands to Flowli's shared Redis driver contract. */
 export function createNodeRedisAdapter(
   client: NodeRedisLikeClient,
 ): RedisCommandAdapter {

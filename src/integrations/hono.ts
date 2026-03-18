@@ -4,21 +4,26 @@ import type {
   JobsRecord,
 } from "../core/types.js";
 
+/** The minimal Hono context contract required by `honoJobs()`. */
 export interface HonoLikeContext {
   set(key: string, value: unknown): void;
 }
 
+/** The continuation callback shape used by Hono middleware. */
 export type HonoLikeNext = () => Promise<unknown>;
 
+/** Options for attaching a Flowli runtime to Hono context. */
 export interface HonoJobsOptions<TKey extends string = "flowli"> {
   readonly key?: TKey;
 }
 
+/** The typed variables shape added to Hono context by `honoJobs()`. */
 export type HonoFlowliVariables<
   TFlowli,
   TKey extends string = "flowli",
 > = Record<TKey, TFlowli>;
 
+/** Creates Hono middleware that attaches an existing Flowli runtime to `c`. */
 export function honoJobs<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,

@@ -4,17 +4,20 @@ import type {
   JobsRecord,
 } from "../core/types.js";
 
+/** A minimal route params record compatible with Next.js route handlers. */
 export type NextRouteParams = Record<
   string,
   string | ReadonlyArray<string> | undefined
 >;
 
+/** The request context object supplied by Next.js route handlers. */
 export interface NextRouteContext<
   TParams extends NextRouteParams = NextRouteParams,
 > {
   readonly params?: TParams | Promise<TParams>;
 }
 
+/** Arguments passed to a `nextRoute()` handler. */
 export interface NextRouteHandlerArgs<
   TFlowli,
   TParams extends NextRouteParams = NextRouteParams,
@@ -26,6 +29,7 @@ export interface NextRouteHandlerArgs<
   readonly flowli: TFlowli;
 }
 
+/** A typed handler for the `nextRoute()` integration helper. */
 export type NextRouteHandler<
   TFlowli,
   TParams extends NextRouteParams = NextRouteParams,
@@ -35,10 +39,12 @@ export type NextRouteHandler<
   args: NextRouteHandlerArgs<TFlowli, TParams, TRequest>,
 ) => TResult | Promise<TResult>;
 
+/** Tools injected into a `nextAction()` handler. */
 export interface NextActionTools<TFlowli> {
   readonly flowli: TFlowli;
 }
 
+/** A typed handler for the `nextAction()` integration helper. */
 export type NextActionHandler<
   TFlowli,
   TArgs extends ReadonlyArray<unknown>,
@@ -48,6 +54,7 @@ export type NextActionHandler<
   ...args: TArgs
 ) => TResult | Promise<TResult>;
 
+/** Wraps a Next.js route handler with access to an existing Flowli runtime. */
 export function nextRoute<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,
@@ -81,6 +88,7 @@ export function nextRoute<
   };
 }
 
+/** Wraps a Next.js server action with access to an existing Flowli runtime. */
 export function nextAction<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,

@@ -4,15 +4,18 @@ import type {
   JobsRecord,
 } from "../core/types.js";
 
+/** A minimal params record compatible with TanStack Start server routes. */
 export type TanStackStartRouteParams = Record<
   string,
   string | ReadonlyArray<string> | undefined
 >;
 
+/** The generic server route context provided by TanStack Start. */
 export interface TanStackStartRouteContext {
   readonly [key: PropertyKey]: unknown;
 }
 
+/** Arguments passed to a `tanstackStartRoute()` handler. */
 export interface TanStackStartRouteHandlerArgs<
   TFlowli,
   TParams extends TanStackStartRouteParams = TanStackStartRouteParams,
@@ -25,6 +28,7 @@ export interface TanStackStartRouteHandlerArgs<
   readonly flowli: TFlowli;
 }
 
+/** A typed handler for TanStack Start route integration. */
 export type TanStackStartRouteHandler<
   TFlowli,
   TParams extends TanStackStartRouteParams = TanStackStartRouteParams,
@@ -35,6 +39,7 @@ export type TanStackStartRouteHandler<
   args: TanStackStartRouteHandlerArgs<TFlowli, TParams, TContext, TRequest>,
 ) => TResult | Promise<TResult>;
 
+/** Tools injected into a TanStack Start server function handler. */
 export interface TanStackStartServerFnTools<TFlowli> {
   readonly flowli: TFlowli;
 }
@@ -44,12 +49,14 @@ type StripFlowli<TArgs extends object> = Omit<
   keyof TanStackStartServerFnTools<unknown>
 >;
 
+/** A typed handler for TanStack Start server function integration. */
 export type TanStackStartServerFnHandler<
   TFlowli,
   TArgs extends TanStackStartServerFnTools<TFlowli>,
   TResult,
 > = (args: TArgs) => TResult | Promise<TResult>;
 
+/** Wraps a TanStack Start route with access to an existing Flowli runtime. */
 export function tanstackStartRoute<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,
@@ -84,6 +91,7 @@ export function tanstackStartRoute<
     });
 }
 
+/** Wraps a TanStack Start server function with Flowli runtime access. */
 export function tanstackStartServerFn<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,

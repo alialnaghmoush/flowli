@@ -105,6 +105,10 @@ function buildRuntime<
   return runtime as FlowliRuntime<TJobs, TContext>;
 }
 
+/**
+ * Creates a Flowli runtime from a runtime-scoped context, a jobs registry, and
+ * an optional async driver.
+ */
 export const defineJobs: DefineJobsFunction = Object.assign(
   defineJobsFromFactory,
   {
@@ -119,6 +123,7 @@ export const defineJobs: DefineJobsFunction = Object.assign(
   },
 );
 
+/** Returns the non-public runtime internals used by integrations and tests. */
 export function getFlowliRuntimeInternals<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,

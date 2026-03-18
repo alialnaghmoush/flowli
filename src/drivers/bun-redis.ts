@@ -1,6 +1,7 @@
 import type { FlowliDriver } from "../core/types.js";
 import { createRedisDriver, type RedisCommandAdapter } from "./shared.js";
 
+/** The subset of a Bun Redis client Flowli requires. */
 export interface BunRedisLikeClient {
   get(key: string): Promise<string | null>;
   set(
@@ -19,11 +20,13 @@ export interface BunRedisLikeClient {
   ): Promise<string[]>;
 }
 
+/** Options for creating the `flowli/bun-redis` driver. */
 export interface BunRedisDriverOptions {
   readonly client: BunRedisLikeClient;
   readonly prefix?: string;
 }
 
+/** Creates a Flowli driver backed by a Bun Redis-compatible client. */
 export function bunRedisDriver(options: BunRedisDriverOptions): FlowliDriver {
   return createRedisDriver({
     kind: "bun-redis",
@@ -32,6 +35,7 @@ export function bunRedisDriver(options: BunRedisDriverOptions): FlowliDriver {
   });
 }
 
+/** Adapts Bun Redis commands to Flowli's shared Redis driver contract. */
 export function createBunRedisAdapter(
   client: BunRedisLikeClient,
 ): RedisCommandAdapter {

@@ -1,6 +1,7 @@
 import type { FlowliDriver } from "../core/types.js";
 import { createRedisDriver, type RedisCommandAdapter } from "./shared.js";
 
+/** The subset of an ioredis client Flowli requires. */
 export interface IoredisLikeClient {
   get(key: string): Promise<string | null>;
   set(
@@ -23,11 +24,13 @@ export interface IoredisLikeClient {
   ): Promise<string[]>;
 }
 
+/** Options for creating the `flowli/ioredis` driver. */
 export interface IoredisDriverOptions {
   readonly client: IoredisLikeClient;
   readonly prefix?: string;
 }
 
+/** Creates a Flowli driver backed by an ioredis-compatible client. */
 export function ioredisDriver(options: IoredisDriverOptions): FlowliDriver {
   return createRedisDriver({
     kind: "ioredis",
@@ -36,6 +39,7 @@ export function ioredisDriver(options: IoredisDriverOptions): FlowliDriver {
   });
 }
 
+/** Adapts ioredis commands to Flowli's shared Redis driver contract. */
 export function createIoredisAdapter(
   client: IoredisLikeClient,
 ): RedisCommandAdapter {

@@ -11,6 +11,7 @@ import { invokeHandler } from "../runtime/invoke-handler.js";
 import { validateWithSchema } from "../runtime/validate.js";
 import type { FlowliRunner, RunnerOptions } from "./types.js";
 
+/** Creates an explicit runner for queued, delayed, and scheduled Flowli jobs. */
 export function createRunner<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,

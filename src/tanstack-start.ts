@@ -1,3 +1,7 @@
+/**
+ * The `flowli/tanstack-start` entrypoint provides helpers for TanStack Start
+ * server routes and server functions.
+ */
 export {
   type TanStackStartRouteContext,
   type TanStackStartRouteHandler,

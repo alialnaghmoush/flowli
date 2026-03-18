@@ -6,6 +6,7 @@ import type {
   PersistedJobRecord,
 } from "../core/types.js";
 
+/** Lifecycle hooks emitted by the Flowli runner during async execution. */
 export interface RunnerHooks {
   readonly onJobStarted?: (
     jobId: string,
@@ -33,6 +34,7 @@ export interface RunnerHooks {
   ) => void | Promise<void>;
 }
 
+/** Options for constructing a Flowli runner from an existing runtime. */
 export interface RunnerOptions<
   TJobs extends JobsRecord,
   TContext extends FlowliContextRecord,
@@ -45,6 +47,7 @@ export interface RunnerOptions<
   readonly hooks?: RunnerHooks;
 }
 
+/** The explicit async processor returned by `createRunner()`. */
 export interface FlowliRunner {
   readonly running: boolean;
   runOnce(): Promise<number>;

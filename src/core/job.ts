@@ -5,6 +5,7 @@ import type {
   StandardSchemaV1,
 } from "./types.js";
 
+/** A job factory already bound to a specific Flowli context type. */
 type JobFactory = {
   <
     TInputSchema extends StandardSchemaV1<any, any>,
@@ -29,6 +30,7 @@ type JobFactory = {
   ) => JobDefinition<TInputSchema, TMetaSchema, TContext, TResult>;
 };
 
+/** The typed factory signature returned when a runtime binds `ctx` shape. */
 export type ContextualJobFactory<TContext extends FlowliContextRecord> = <
   TInputSchema extends StandardSchemaV1<any, any>,
   TMetaSchema extends StandardSchemaV1<any, any> | undefined,
@@ -59,6 +61,7 @@ function createJob<
   };
 }
 
+/** Defines a Flowli job with typed input, optional meta, and a handler. */
 export const job: JobFactory = Object.assign(createJob, {
   withContext<TContext extends FlowliContextRecord>() {
     return <
@@ -72,6 +75,7 @@ export const job: JobFactory = Object.assign(createJob, {
   },
 });
 
+/** Creates a contextual `job()` factory for runtime-first authoring flows. */
 export function createContextualJobFactory<
   TContext extends FlowliContextRecord,
 >(): ContextualJobFactory<TContext> {

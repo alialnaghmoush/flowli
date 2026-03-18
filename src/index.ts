@@ -1,3 +1,7 @@
+/**
+ * Flowli's root entrypoint exports the typed jobs runtime, core errors, and
+ * essential public types without pulling in driver or framework code.
+ */
 export { defineJobs } from "./core/define-jobs.js";
 export {
   FlowliDefinitionError,
